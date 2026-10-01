@@ -17,29 +17,43 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.erns.alertauni.data.model.StudentEnrollment
 
-// Paleta de colores del prototipo de Figma
+// Paleta de colores oficial de Figma
 private val FigmaGold = Color(0xFFC59A27)
 private val FigmaRed = Color(0xFFEF5350)
 private val FigmaGreen = Color(0xFF2E7D32)
 private val FigmaBackground = Color(0xFFF9F9F8)
+private val FigmaCardBg = Color(0xFFF4F4F4)
 
 /**
- * Pantalla completa de incorporación de cursos para el Estudiante (Estado 1 de Figma).
+ * Estados visuales del flujo de incorporación (Mapeo Figma).
  */
+enum class CourseUiState {
+    INPUT_CODE,         // Estado 1 / 6a / 6c
+    SCAN_QR,            // Estado 2
+    LOADING_QR,         // Estado 3
+    FOUND_QR,           // Estado 4-Prev
+    CONFIRM_COURSE,     // Estado 4
+    SUCCESS,            // Estado 5
+    ALREADY_ENROLLED    // Estado 6b
+}
+
 @Composable
 fun StudentCourseScreen(
     studentName: String = "Juan",
+    uiState: CourseUiState = CourseUiState.INPUT_CODE,
     studentEnrollment: StudentEnrollment? = null,
-    isEnrolledSuccess: Boolean = false,
     errorMessage: String? = null,
     onFindCourse: (String) -> Unit = {},
     onEnrollCourse: (String) -> Unit = {},
-    onOpenQr: () -> Unit = {}
+    onOpenQr: () -> Unit = {},
+    onSwitchToManual: () -> Unit = {},
+    onGoToCourse: () -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
@@ -47,7 +61,7 @@ fun StudentCourseScreen(
     Scaffold(
         containerColor = FigmaBackground,
         topBar = {
-            // Header Superior: "Hola, Juan 👋" + Campana de notificaciones
+            // Header Superior: Saludo y Notificaciones
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -73,7 +87,6 @@ fun StudentCourseScreen(
                     )
                 }
 
-                // Botón Notificación
                 IconButton(
                     onClick = { },
                     modifier = Modifier
@@ -98,63 +111,32 @@ fun StudentCourseScreen(
             }
         },
         bottomBar = {
-            // Navigation Bar Inferior de Figma (Inicio, Buscar, Mis cursos, Perfil)
+            // Navigation Bar Inferior
             NavigationBar(
                 containerColor = Color.White,
                 tonalElevation = 8.dp
             ) {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Inicio") },
-                    label = { Text("Inicio", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = FigmaGold,
-                        selectedTextColor = FigmaGold,
-                        indicatorColor = Color.Transparent,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
-                    )
+                val items = listOf(
+                    "Inicio" to Icons.Default.Home,
+                    "Buscar" to Icons.Default.Search,
+                    "Mis cursos" to Icons.Default.DateRange,
+                    "Perfil" to Icons.Default.Person
                 )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
-                    label = { Text("Buscar", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = FigmaGold,
-                        selectedTextColor = FigmaGold,
-                        indicatorColor = Color.Transparent,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                items.forEachIndexed { index, pair ->
+                    NavigationBarItem(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        icon = { Icon(pair.second, contentDescription = pair.first) },
+                        label = { Text(pair.first, fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = FigmaGold,
+                            selectedTextColor = FigmaGold,
+                            indicatorColor = Color.Transparent,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray
+                        )
                     )
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Default.DateRange, contentDescription = "Mis cursos") },
-                    label = { Text("Mis cursos", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = FigmaGold,
-                        selectedTextColor = FigmaGold,
-                        indicatorColor = Color.Transparent,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
-                    )
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Perfil") },
-                    label = { Text("Perfil", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = FigmaGold,
-                        selectedTextColor = FigmaGold,
-                        indicatorColor = Color.Transparent,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
-                    )
-                )
+                }
             }
         }
     ) { innerPadding ->
@@ -164,113 +146,9 @@ fun StudentCourseScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            when {
-                // ESTADO 5: Matrícula Exitosa
-                isEnrolledSuccess -> {
-                    Text(
-                        text = "Confirmar Curso",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    studentEnrollment?.let { course ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("Nombre: ${course.courseName}", fontWeight = FontWeight.Medium)
-                                Text("Cód: ${course.courseCode}", fontWeight = FontWeight.Medium)
-                                Text("Semestre: ${course.semester}", fontWeight = FontWeight.Medium)
-                                Text("Docente: ${course.firstname} ${course.surname}", fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Éxito",
-                            tint = FigmaGreen,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Te has incorporado exitosamente",
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Button(
-                            onClick = { },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Ir al muro de publicaciones", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                // ESTADO 4: Confirmar Curso Encontrado
-                studentEnrollment != null -> {
-                    Text(
-                        text = "Confirmar Curso",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Nombre: ${studentEnrollment.courseName}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Cód: ${studentEnrollment.courseCode}", fontSize = 14.sp)
-                            Text("Semestre: ${studentEnrollment.semester}", fontSize = 14.sp)
-                            Text("Docente: ${studentEnrollment.firstname} ${studentEnrollment.surname}", fontSize = 14.sp)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = { onEnrollCourse(studentEnrollment.courseId) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Confirmar Matrícula", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Button(
-                        onClick = { },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = FigmaRed),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Cancelar", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // ESTADO 1: Ingresar a un Curso (Pantalla Principal)
-                else -> {
+            when (uiState) {
+                // ESTADO 1 / 6a / 6c: Ingresar Código / Errores
+                CourseUiState.INPUT_CODE -> {
                     Text(
                         text = "Ingresar a un Curso",
                         style = MaterialTheme.typography.titleLarge.copy(
@@ -300,7 +178,8 @@ fun StudentCourseScreen(
                         Text(
                             text = "⚠️ $errorMessage",
                             color = FigmaRed,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
 
@@ -318,23 +197,238 @@ fun StudentCourseScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = FigmaGold
+                            ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Buscar Curso", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (errorMessage == "Error de conexión.") "Reintentar" else "Buscar Curso",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
-                        // Botón Escáner QR
                         OutlinedIconButton(
                             onClick = onOpenQr,
                             modifier = Modifier
                                 .size(50.dp)
                                 .background(Color.White, RoundedCornerShape(12.dp)),
-                            shape = RoundedCornerShape(12.dp),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("QR", fontWeight = FontWeight.Bold, color = Color.Black)
+                            Text(
+                                text = "QR",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color.Black
+                            )
                         }
+                    }
+                }
+
+                // ESTADO 2, 3 y 4-Prev: Escáner QR y Carga
+                CourseUiState.SCAN_QR, CourseUiState.LOADING_QR, CourseUiState.FOUND_QR -> {
+                    Text(
+                        text = "Escanear QR",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp)
+                            .background(Color(0xFFE0E0E0), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(180.dp)
+                                .background(Color.White, RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "QR",
+                                fontSize = 48.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.Black
+                            )
+                        }
+
+                        if (uiState == CourseUiState.LOADING_QR) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(color = Color.White)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text("Localizando\ncurso ...", color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+
+                        if (uiState == CourseUiState.FOUND_QR) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = FigmaGreen, modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Curso Encontrado\nRedirigiendo", color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = { },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Buscar Curso", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onSwitchToManual,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD3D3D3)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Ingresar Código Manual", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // ESTADO 4: Confirmar Curso
+                CourseUiState.CONFIRM_COURSE -> {
+                    Text(
+                        text = "Confirmar Curso",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    studentEnrollment?.let { course ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Nombre: ${course.courseName}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Cód: ${course.courseCode}", fontSize = 14.sp)
+                                Text("Semestre: ${course.semester}", fontSize = 14.sp)
+                                Text("Docente: ${course.firstname} ${course.surname}", fontSize = 14.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Button(
+                        onClick = { studentEnrollment?.let { onEnrollCourse(it.courseId) } },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Confirmar Matrícula", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onSwitchToManual,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = FigmaRed),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancelar", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // ESTADO 5: Matrícula Exitosa
+                CourseUiState.SUCCESS -> {
+                    Text(
+                        text = "Confirmar Curso",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    studentEnrollment?.let { course ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = FigmaCardBg),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Nombre: ${course.courseName}", fontWeight = FontWeight.Bold)
+                                Text("Cód: ${course.courseCode}")
+                                Text("Semestre: ${course.semester}")
+                                Text("Docente: ${course.firstname} ${course.surname}")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = "Éxito", tint = FigmaGreen, modifier = Modifier.size(64.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Te has incorporado exitosamente", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Button(
+                            onClick = onGoToCourse,
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Ir al muro de publicaciones", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // ESTADO 6b: Ya perteneces a este curso
+                CourseUiState.ALREADY_ENROLLED -> {
+                    Text(
+                        text = "Ingresar a un Curso",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Curso: ${studentEnrollment?.courseName ?: "Curso 1"}", fontWeight = FontWeight.Bold)
+                            Text("Ya perteneces a este curso", color = Color.Gray, fontSize = 13.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = onGoToCourse,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Ir al Curso", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -343,15 +437,97 @@ fun StudentCourseScreen(
 }
 
 // =========================================================================
-// PREVIEWS DE FIGMA
+// CATÁLOGO COMPLETO DE PREVIEWS PARA CAPTURAS DEL INFORME
 // =========================================================================
 
-@Preview(name = "Figma Estado 1: Pantalla Principal", showBackground = true, showSystemUi = true)
+private val mockCourse = StudentEnrollment(
+    courseId = "CAT-101",
+    course_catalog_id = "CAT-101",
+    courseCode = "000001",
+    courseName = "Curso 1",
+    courseType = "Obligatorio",
+    groupType = "Grupo A",
+    firstname = "Julio",
+    surname = "Pérez",
+    email = "julio@unsa.edu.pe",
+    semester = "2026-B"
+)
+
+@Preview(name = "1. Figma Estado 1: Inicio", showBackground = true, showSystemUi = true)
 @Composable
-fun StudentCourseScreenEstado1Preview() {
+fun PreviewEstado1() {
+    MaterialTheme { StudentCourseScreen(uiState = CourseUiState.INPUT_CODE) }
+}
+
+@Preview(name = "2. Figma Estado 2: Escanear QR", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado2() {
+    MaterialTheme { StudentCourseScreen(uiState = CourseUiState.SCAN_QR) }
+}
+
+@Preview(name = "3. Figma Estado 3: Cargando QR", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado3() {
+    MaterialTheme { StudentCourseScreen(uiState = CourseUiState.LOADING_QR) }
+}
+
+@Preview(name = "4. Figma Estado 4-Prev: Redirigiendo QR", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado4Prev() {
+    MaterialTheme { StudentCourseScreen(uiState = CourseUiState.FOUND_QR) }
+}
+
+@Preview(name = "5. Figma Estado 4: Confirmar Matrícula", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado4() {
     MaterialTheme {
         StudentCourseScreen(
-            studentName = "Juan"
+            uiState = CourseUiState.CONFIRM_COURSE,
+            studentEnrollment = mockCourse
+        )
+    }
+}
+
+@Preview(name = "6. Figma Estado 5: Matrícula Exitosa", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado5() {
+    MaterialTheme {
+        StudentCourseScreen(
+            uiState = CourseUiState.SUCCESS,
+            studentEnrollment = mockCourse
+        )
+    }
+}
+
+@Preview(name = "7. Figma Estado 6a: Error Código Inexistente", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado6a() {
+    MaterialTheme {
+        StudentCourseScreen(
+            uiState = CourseUiState.INPUT_CODE,
+            errorMessage = "El código no existe o las inscripciones estan cerradas."
+        )
+    }
+}
+
+@Preview(name = "8. Figma Estado 6b: Ya Registrado", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado6b() {
+    MaterialTheme {
+        StudentCourseScreen(
+            uiState = CourseUiState.ALREADY_ENROLLED,
+            studentEnrollment = mockCourse
+        )
+    }
+}
+
+@Preview(name = "9. Figma Estado 6c: Error de Conexión", showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewEstado6c() {
+    MaterialTheme {
+        StudentCourseScreen(
+            uiState = CourseUiState.INPUT_CODE,
+            errorMessage = "Error de conexión."
         )
     }
 }
