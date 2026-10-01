@@ -4,19 +4,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -25,17 +18,19 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.LaunchedEffect
 import com.erns.alertauni.domain.manager.DataStoreHelper
+import com.erns.alertauni.screen.common.UnderDevelopmentScreen
 import com.erns.alertauni.screen.contact.StudentContactScreen
 import com.erns.alertauni.screen.contact.TeacherContactScreen
 import com.erns.alertauni.screen.course.StudentCourseRoute
-import com.erns.alertauni.screen.course.StudentCourseScreen
 import com.erns.alertauni.screen.course.TeacherCourseDetailRoute
 import com.erns.alertauni.screen.login.LoginScreen
 import com.erns.alertauni.screen.login.ProfileScreen
 import com.erns.alertauni.screen.post.PostCommentScreen
 import com.erns.alertauni.screen.post.PostScreen
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 @Composable
@@ -43,72 +38,62 @@ fun MainAppNavigation(navController: NavHostController = rememberNavController()
     val context = LocalContext.current
     val userTypeSelected = remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
-        val savedType = DataStoreHelper(context).getUserType()
-        if (!savedType.isNullOrEmpty()) {
-            userTypeSelected.value = savedType
-        }
-    }
-    NavHost(
-        navController = navController,
-        startDestination = RouteScreen.Login.route
-    ) {
-        composable(RouteScreen.Login.route) {
-            LoginScreen(
-                onIncompleteProfile = {
-                    navController.navigate(RouteScreen.Profile.route) {
-                        popUpTo(RouteScreen.Login.route) {
-                            inclusive = false
+    if (userTypeSelected.value.isEmpty()) {
+        val loginNavController = rememberNavController()
+        NavHost(
+            navController = loginNavController,
+            startDestination = RouteScreen.Login.route
+        ) {
+            composable(RouteScreen.Login.route) {
+                LoginScreen(
+                    onIncompleteProfile = {
+                        loginNavController.navigate(RouteScreen.Profile.route) {
+                            popUpTo(RouteScreen.Login.route) {
+                                inclusive = false
+                            }
                         }
+                    },
+                    onLoginSuccess = { userType ->
+                        userTypeSelected.value = userType
                     }
-                },
-                onLoginSuccess = {userType ->
-                    userTypeSelected.value = userType
-                }
-            )
+                )
+            }
+
+            composable(RouteScreen.Profile.route) {
+                ProfileScreen(
+                    onCompleteProfile = { userType ->
+                        userTypeSelected.value = userType
+                    }
+                )
+            }
         }
-
-        composable(RouteScreen.Profile.route) {
-            ProfileScreen(
-                onCompleteProfile = { userType ->
-                    userTypeSelected.value = userType
+    } else {
+        MainMenuScreen(
+            userType = userTypeSelected.value,
+            onLogout = {
+                userTypeSelected.value = ""
+                CoroutineScope(Dispatchers.IO).launch {
+                    DataStoreHelper(context).clearUserType()
+                    DataStoreHelper(context).clearUserUid()
                 }
-            )
-        }
-
-    }
-
-    if(userTypeSelected.value.isNotEmpty()){
-        MainMenuScreen(userTypeSelected.value)
+            }
+        )
     }
 }
 
 @Composable
-fun MainMenuScreen(userType: String) {
-    val items = mutableListOf<RouteMainMenu>()
+fun MainMenuScreen(userType: String, onLogout: () -> Unit) {
+    val items = listOf(
+        RouteMainMenu.Posts,
+        RouteMainMenu.Courses,
+        if (userType == "PROFESSOR") RouteMainMenu.TeacherContacts else RouteMainMenu.StudentContacts,
+        RouteMainMenu.Profile
+    )
     val fabAction = remember { mutableStateOf<() -> Unit>({}) }
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentBackStackEntry = navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry.value?.destination?.route
-
-    if (userType == "PROFESSOR") {
-        items.addAll(
-            listOf(
-                RouteMainMenu.Posts,
-                RouteMainMenu.TeacherContacts,
-                RouteMainMenu.Courses
-            )
-        )
-    } else if (userType == "STUDENT") {
-        items.addAll(
-            listOf(
-                RouteMainMenu.Posts,
-                RouteMainMenu.StudentContacts,
-                RouteMainMenu.Courses
-            )
-        )
-    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -118,7 +103,9 @@ fun MainMenuScreen(userType: String) {
             ) {
                 FloatingActionButton(
                     shape = CircleShape,
-                    onClick = fabAction.value
+                    onClick = fabAction.value,
+                    containerColor = Color(0xFFC59A27),
+                    contentColor = Color.White
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -128,9 +115,11 @@ fun MainMenuScreen(userType: String) {
             }
         },
         bottomBar = {
-            NavigationBar {
-                val currentDestination =
-                    navController.currentBackStackEntryAsState().value?.destination
+            NavigationBar(
+                containerColor = Color.White,
+                tonalElevation = 8.dp
+            ) {
+                val currentDestination = navController.currentBackStackEntryAsState().value?.destination
                 items.forEach { screen ->
                     NavigationBarItem(
                         selected = currentDestination?.route == screen.route,
@@ -142,7 +131,14 @@ fun MainMenuScreen(userType: String) {
                             }
                         },
                         icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label) }
+                        label = { Text(screen.label, fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFFC59A27),
+                            selectedTextColor = Color(0xFFC59A27),
+                            indicatorColor = Color.Transparent,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray
+                        )
                     )
                 }
             }
@@ -176,12 +172,14 @@ fun MainMenuScreen(userType: String) {
             composable(RouteMainMenu.Courses.route) {
                 if (userType == "PROFESSOR") {
                     TeacherCourseDetailRoute(
+                        onLogout = onLogout,
                         onGoToPosts = {
                             navController.navigate(RouteMainMenu.Posts.route)
                         }
                     )
                 } else {
                     StudentCourseRoute(
+                        onLogout = onLogout,
                         onGoToCourse = { courseId ->
                             navController.navigate(RouteMainMenu.Posts.route) {
                                 popUpTo(RouteMainMenu.Posts.route) { saveState = true }
@@ -196,6 +194,7 @@ fun MainMenuScreen(userType: String) {
 
             composable(RouteScreen.StudentCourseEnrollment.route) {
                 StudentCourseRoute(
+                    onLogout = onLogout,
                     onGoToCourse = { courseId ->
                         navController.navigate(RouteMainMenu.Posts.route) {
                             popUpTo(RouteMainMenu.Posts.route) { saveState = true }
@@ -214,7 +213,9 @@ fun MainMenuScreen(userType: String) {
                 StudentContactScreen()
             }
 
+            composable(RouteMainMenu.Profile.route) {
+                UnderDevelopmentScreen(title = "Perfil de Usuario")
+            }
         }
     }
 }
-

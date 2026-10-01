@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
@@ -29,10 +27,13 @@ private val FigmaGold = Color(0xFFC59A27)
 private val FigmaGreen = Color(0xFF2E7D32)
 private val FigmaBackground = Color(0xFFF9F9F8)
 private val FigmaCardBg = Color(0xFFF4F4F4)
+private val TextPrimary = Color(0xFF1A1A1A)
+private val TextSecondary = Color(0xFF666666)
 
 @Composable
 fun TeacherCourseDetailRoute(
     viewModel: TeacherCourseViewModel = hiltViewModel(),
+    onLogout: () -> Unit = {},
     onGoToPosts: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -41,17 +42,17 @@ fun TeacherCourseDetailRoute(
         uiState = uiState,
         onGenerateNewCode = { courseId ->
             viewModel.generateNewEnrollmentCode(courseId)
-        }
+        },
+        onLogout = onLogout
     )
 }
 
 @Composable
 fun TeacherCourseDetailScreen(
     uiState: TeacherCourseUiState = TeacherCourseUiState(),
-    onGenerateNewCode: (String) -> Unit = {}
+    onGenerateNewCode: (String) -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
-    var selectedTab by remember { mutableIntStateOf(2) }
-
     Scaffold(
         containerColor = FigmaBackground,
         topBar = {
@@ -68,65 +69,36 @@ fun TeacherCourseDetailScreen(
                         text = "Hola, ${uiState.teacherName} 👋",
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
+                            fontSize = 22.sp,
+                            color = TextPrimary
                         )
                     )
                     Text(
                         text = uiState.courseName,
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            color = Color.Gray,
-                            fontSize = 13.sp
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     )
                 }
 
-                IconButton(
-                    onClick = { },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(Color.White, CircleShape)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BadgedBox(
-                        badge = {
-                            Badge(
-                                containerColor = FigmaGold,
-                                modifier = Modifier.size(8.dp)
-                            )
-                        }
+                    IconButton(
+                        onClick = onLogout,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(Color.White, CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Notifications,
-                            contentDescription = "Notificaciones",
-                            tint = Color.Black
+                            imageVector = Icons.Default.ExitToApp,
+                            contentDescription = "Cerrar Sesión",
+                            tint = Color(0xFFEF5350)
                         )
                     }
-                }
-            }
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                tonalElevation = 8.dp
-            ) {
-                val items = listOf(
-                    "Posts" to Icons.Default.Email,
-                    "Contactos" to Icons.Default.Person,
-                    "Cursos" to Icons.Default.AccountBox
-                )
-                items.forEachIndexed { index, pair ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(pair.second, contentDescription = pair.first) },
-                        label = { Text(pair.first, fontSize = 11.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = FigmaGold,
-                            selectedTextColor = FigmaGold,
-                            indicatorColor = Color.Transparent,
-                            unselectedIconColor = Color.Gray,
-                            unselectedTextColor = Color.Gray
-                        )
-                    )
                 }
             }
         }
@@ -142,7 +114,8 @@ fun TeacherCourseDetailScreen(
                 text = "Código y QR de Matriculación",
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
+                    fontSize = 20.sp,
+                    color = TextPrimary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -168,7 +141,7 @@ fun TeacherCourseDetailScreen(
                             text = "Código de Clase",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = Color.Gray
+                            color = TextSecondary
                         )
 
                         Surface(
@@ -199,7 +172,7 @@ fun TeacherCourseDetailScreen(
                     Text(
                         text = "Código para dictar en clase o escribir en la pizarra",
                         fontSize = 12.sp,
-                        color = Color.Gray,
+                        color = TextSecondary,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
                     )
@@ -237,7 +210,7 @@ fun TeacherCourseDetailScreen(
                         text = "Escanear con Alerta UNI App",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.DarkGray,
+                        color = TextPrimary,
                         modifier = Modifier.padding(top = 12.dp, bottom = 24.dp)
                     )
 
@@ -277,28 +250,5 @@ fun TeacherCourseDetailScreen(
                 }
             }
         }
-    }
-}
-
-// =========================================================================
-// PREVIEW AISLADA PARA VERIFICACIÓN VISUAL EN CANVAS
-// =========================================================================
-
-@Preview(name = "Vista Docente: Generación Código y QR", showBackground = true, showSystemUi = true)
-@Composable
-fun TeacherCourseDetailScreenPreview() {
-    val sampleCode = "A8K92X"
-    val sampleQrBitmap = CourseCodeUtil.generateQrCodeBitmap(sampleCode, 512)
-
-    MaterialTheme {
-        TeacherCourseDetailScreen(
-            uiState = TeacherCourseUiState(
-                teacherName = "Prof. Julio Pérez",
-                courseName = "Curso 1 - Programación Avanzada",
-                enrollmentCode = sampleCode,
-                qrBitmap = sampleQrBitmap,
-                isEnrollmentOpen = true
-            )
-        )
     }
 }

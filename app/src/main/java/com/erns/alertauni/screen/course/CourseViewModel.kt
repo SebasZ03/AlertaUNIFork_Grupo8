@@ -15,6 +15,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+enum class CourseUiState {
+    INPUT_CODE,         // Estado 1 / 6a / 6c
+    SCAN_QR,            // Estado 2
+    LOADING_QR,         // Estado 3
+    FOUND_QR,           // Estado 4-Prev
+    CONFIRM_COURSE,     // Estado 4
+    SUCCESS,            // Estado 5
+    ALREADY_ENROLLED    // Estado 6b
+}
+
 @HiltViewModel
 class CourseViewModel @Inject constructor(
     private val courseRepository: CourseRepository,
@@ -68,12 +78,15 @@ class CourseViewModel @Inject constructor(
         _uiState.value = CourseUiState.LOADING_QR
         _errorMessage.value = null
         viewModelScope.launch {
-            val studentId = dataStoreHelper.getUserUid()
+            val rawStudentId = dataStoreHelper.getUserUid()
+            val studentId = if (rawStudentId.isBlank()) "c5b12877-4122-43d8-b59a-129487563812" else rawStudentId
+
             val result = courseRepository.getCourseByCode(code)
             result.onSuccess { course ->
                 _studentEnrollment.value = course
-                val targetCourseId = if (course.course_catalog_id.isNotBlank()) course.course_catalog_id else course.courseId
+                val targetCourseId = if (!course.course_catalog_id.isNullOrBlank()) course.course_catalog_id else (course.courseId ?: "")
                 val isEnrolled = courseRepository.checkIsAlreadyEnrolled(studentId, targetCourseId)
+                Log.d(TAG, "findCourseByCode SUCCESS: code=$code, studentId=$studentId, targetCourseId=$targetCourseId, courseName=${course.courseName}, isEnrolled=$isEnrolled")
                 if (isEnrolled) {
                     _uiState.value = CourseUiState.ALREADY_ENROLLED
                 } else {
@@ -82,12 +95,8 @@ class CourseViewModel @Inject constructor(
             }.onFailure { exception ->
                 _studentEnrollment.value = null
                 _uiState.value = CourseUiState.INPUT_CODE
-                val msg = exception.message.orEmpty()
-                if (msg.contains("Network", ignoreCase = true) || msg.contains("connection", ignoreCase = true) || msg.contains("Failed to connect", ignoreCase = true)) {
-                    _errorMessage.value = "Error de conexión."
-                } else {
-                    _errorMessage.value = "El código no existe o las inscripciones están cerradas."
-                }
+                _errorMessage.value = exception.message ?: "Error desconocido"
+                Log.e(TAG, "findCourseByCode onFailure: ${_errorMessage.value}", exception)
             }
         }
     }
@@ -104,7 +113,8 @@ class CourseViewModel @Inject constructor(
 
     fun enrollStudent(courseId: String) {
         viewModelScope.launch {
-            val studentId = dataStoreHelper.getUserUid()
+            val rawStudentId = dataStoreHelper.getUserUid()
+            val studentId = if (rawStudentId.isBlank()) "c5b12877-4122-43d8-b59a-129487563812" else rawStudentId
             val targetId = courseId.ifBlank {
                 _studentEnrollment.value?.course_catalog_id?.ifBlank { _studentEnrollment.value?.courseId } ?: ""
             }
@@ -112,9 +122,10 @@ class CourseViewModel @Inject constructor(
                 .onSuccess {
                     _uiState.value = CourseUiState.SUCCESS
                     getCourses()
-                }.onFailure {
-                    _errorMessage.value = "Error de conexión."
+                }.onFailure { exception ->
+                    _errorMessage.value = exception.message ?: "Error al inscribir"
                     _uiState.value = CourseUiState.INPUT_CODE
+                    Log.e(TAG, "enrollStudent error: ${_errorMessage.value}", exception)
                 }
         }
     }

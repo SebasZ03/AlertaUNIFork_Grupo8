@@ -1,12 +1,15 @@
 package com.erns.alertauni.screen.course
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.erns.alertauni.data.repository.TeacherCourseRepository
 import com.erns.alertauni.domain.manager.DataStoreHelper
 import com.erns.alertauni.util.CourseCodeUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,15 +34,17 @@ data class TeacherCourseUiState(
 @HiltViewModel
 class TeacherCourseViewModel @Inject constructor(
     private val teacherCourseRepository: TeacherCourseRepository,
-    private val dataStoreHelper: DataStoreHelper
+    private val dataStoreHelper: DataStoreHelper,
+    private val supabaseClient: SupabaseClient
 ) : ViewModel() {
+    private val TAG = "TeacherCourseViewModel"
 
     private val _uiState = MutableStateFlow(TeacherCourseUiState())
     val uiState: StateFlow<TeacherCourseUiState> = _uiState.asStateFlow()
 
     init {
         loadTeacherInfo()
-        generateNewEnrollmentCode("CAT-101")
+        loadSavedCourseCode("CAT-101")
     }
 
     private fun loadTeacherInfo() {
@@ -49,6 +54,38 @@ class TeacherCourseViewModel @Inject constructor(
             val fullName = "$firstname $surname".trim()
             if (fullName.isNotBlank()) {
                 _uiState.update { it.copy(teacherName = fullName) }
+            }
+        }
+    }
+
+    private fun loadSavedCourseCode(courseId: String) {
+        viewModelScope.launch {
+            try {
+                val list = supabaseClient.postgrest["course_catalog"]
+                    .select()
+                    .decodeList<Map<String, Any>>()
+
+                val row = list.firstOrNull { it["course_catalog_id"]?.toString() == courseId } ?: list.firstOrNull()
+                val existingCode = row?.get("class_code")?.toString() ?: ""
+                val actualCourseId = row?.get("course_catalog_id")?.toString() ?: courseId
+
+                val codeToUse = if (existingCode.isNotBlank()) existingCode else "A8K92X"
+                val bitmap = CourseCodeUtil.generateQrCodeBitmap(codeToUse, 512)
+
+                Log.d(TAG, "Loaded saved course code: code=$codeToUse for courseId=$actualCourseId")
+
+                _uiState.update {
+                    it.copy(
+                        courseId = actualCourseId,
+                        enrollmentCode = codeToUse,
+                        qrBitmap = bitmap
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading saved course code: ${e.message}", e)
+                val defaultCode = "A8K92X"
+                val defaultBitmap = CourseCodeUtil.generateQrCodeBitmap(defaultCode, 512)
+                _uiState.update { it.copy(enrollmentCode = defaultCode, qrBitmap = defaultBitmap) }
             }
         }
     }
@@ -70,7 +107,7 @@ class TeacherCourseViewModel @Inject constructor(
                         qrBitmap = bitmap,
                         isLoading = false,
                         isEnrollmentOpen = true,
-                        successMessage = "Código $newCode generado exitosamente"
+                        successMessage = "Código $newCode cambiado exitosamente"
                     )
                 }
             }.onFailure {
@@ -81,7 +118,7 @@ class TeacherCourseViewModel @Inject constructor(
                         qrBitmap = bitmap,
                         isLoading = false,
                         isEnrollmentOpen = true,
-                        errorMessage = "Código $newCode generado localmente"
+                        errorMessage = "Código $newCode cambiado localmente"
                     )
                 }
             }

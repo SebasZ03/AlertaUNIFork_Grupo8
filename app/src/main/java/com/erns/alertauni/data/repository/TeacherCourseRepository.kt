@@ -1,5 +1,6 @@
 package com.erns.alertauni.data.repository
 
+import android.util.Log
 import com.erns.alertauni.data.model.CourseCatalogEntity
 import com.erns.alertauni.data.remote.CourseDataSource
 import io.github.jan.supabase.SupabaseClient
@@ -10,6 +11,7 @@ import javax.inject.Inject
 
 interface TeacherCourseRepository {
     suspend fun updateCourseEnrollmentCode(courseId: String, newCode: String): Result<Boolean>
+    suspend fun getCourseEnrollmentCode(courseId: String): Result<String?>
     suspend fun getTeacherCourses(): Result<List<CourseCatalogEntity>>
 }
 
@@ -26,19 +28,35 @@ class TeacherCourseRepositoryImpl @Inject constructor(
 
     override suspend fun updateCourseEnrollmentCode(courseId: String, newCode: String): Result<Boolean> {
         return try {
-            try {
-                supabaseClient.postgrest["course_catalog"].update(
-                    CodeUpdatePayload(classCode = newCode, classCodeEnable = true)
-                ) {
-                    filter {
-                        eq("course_catalog_id", courseId)
-                    }
+            supabaseClient.postgrest["course_catalog"].update(
+                CodeUpdatePayload(classCode = newCode, classCodeEnable = true)
+            ) {
+                filter {
+                    eq("course_catalog_id", courseId)
                 }
-            } catch (e: Exception) {
-                // Fallback silencioso para entorno demo
             }
             Result.success(true)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getCourseEnrollmentCode(courseId: String): Result<String?> {
+        return try {
+            val cleanCourseId = courseId.trim()
+            val list = supabaseClient.postgrest["course_catalog"]
+                .select {
+                    filter {
+                        eq("course_catalog_id", cleanCourseId)
+                    }
+                }
+                .decodeList<Map<String, Any>>()
+
+            val row = list.firstOrNull()
+            val code = row?.get("class_code")?.toString()
+            Result.success(code)
+        } catch (e: Exception) {
+            Log.e("TeacherCourseRepository", "Error obteniendo código de Supabase: ${e.message}", e)
             Result.failure(e)
         }
     }

@@ -1,10 +1,9 @@
 package com.erns.alertauni.screen.contact
 
 import androidx.compose.runtime.Composable
-import androidx.hilt.navigation.compose.hiltViewModel
+import com.erns.alertauni.screen.common.UnderDevelopmentScreen
 
 @Composable
-fun StudentContactScreen(
-    viewModel: ContactViewModel = hiltViewModel(),
-)  {
+fun StudentContactScreen() {
+    UnderDevelopmentScreen(title = "Contactos")
 }
