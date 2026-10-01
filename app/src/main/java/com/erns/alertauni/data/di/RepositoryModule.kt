@@ -16,6 +16,8 @@ import com.erns.alertauni.data.repository.PostRepository
 import com.erns.alertauni.data.repository.PostRepositoryImpl
 import com.erns.alertauni.data.repository.StudentRepository
 import com.erns.alertauni.data.repository.StudentRepositoryImpl
+import com.erns.alertauni.data.repository.TeacherCourseRepository
+import com.erns.alertauni.data.repository.TeacherCourseRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -73,4 +75,10 @@ abstract class RepositoryModule {
     abstract fun bindAnnounceRepository(
         announceRepositoryImpl: AnnounceRepositoryImpl
     ): AnnounceRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTeacherCourseRepository(
+        teacherCourseRepositoryImpl: TeacherCourseRepositoryImpl
+    ): TeacherCourseRepository
 }

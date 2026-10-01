@@ -8,6 +8,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.gotrue.Auth
+import io.github.jan.supabase.postgrest.Postgrest
+import io.ktor.client.engine.okhttp.OkHttp
 import javax.inject.Singleton
 
 
@@ -19,20 +21,13 @@ object SupabaseModule {
     @Singleton
     fun provideSupabaseClient(): SupabaseClient {
         return createSupabaseClient(
-            supabaseUrl = "https://myurl.supabase.co",
-            supabaseKey = "supabase_key"
+            supabaseUrl = "https://rxgiskmkyockhpnmhxmw.supabase.co",
+            supabaseKey = "sb_publishable_iVa3jTMrNSzkFe08ZzKmpQ_Rke4Ae2i"
         ) {
-//            install(Postgrest)
-//            install(Auth)
-//            install(Realtime)
-            httpEngine = io.ktor.client.engine.okhttp.OkHttp.create()
-            install(Functions) // Add this for Edge Functions
+            httpEngine = OkHttp.create()
+            install(Functions)
+            install(Postgrest)
             install(Auth)
-
         }
     }
-
-//    @Provides
-//    @Singleton
-//    fun providePostgrest(client: SupabaseClient): Postgrest = client.postgrest
 }

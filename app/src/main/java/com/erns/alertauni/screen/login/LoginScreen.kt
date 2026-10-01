@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,7 +68,9 @@ fun LoginScreen(
     LoginLayout(
         rememberMe = rememberMe.value,
         onRememberMeChange = { viewModel.setRememberMe(it) },
-        btnAutenticar = btnAutenticar
+        btnAutenticar = btnAutenticar,
+        btnIngresarEstudianteDemo = { viewModel.loginAsGuestStudent() },
+        btnIngresarDocenteDemo = { viewModel.loginAsGuestTeacher() }
     )
 
 }
@@ -73,7 +79,9 @@ fun LoginScreen(
 fun LoginLayout(
     rememberMe: Boolean,
     onRememberMeChange: (Boolean) -> Unit,
-    btnAutenticar: () -> Unit
+    btnAutenticar: () -> Unit,
+    btnIngresarEstudianteDemo: () -> Unit = {},
+    btnIngresarDocenteDemo: () -> Unit = {}
 ) {
 
     Column(
@@ -125,6 +133,46 @@ fun LoginLayout(
                 onCheckedChange = onRememberMeChange
             )
             Text("Recordar cuenta", modifier = Modifier.padding(start = 2.dp))
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 26.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = btnIngresarEstudianteDemo,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC59A27)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Text(
+                    text = "Demo Alumno",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+
+            Button(
+                onClick = btnIngresarDocenteDemo,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Text(
+                    text = "Demo Docente",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
         }
 
     }

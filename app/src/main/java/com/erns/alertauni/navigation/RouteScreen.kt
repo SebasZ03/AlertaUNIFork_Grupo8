@@ -11,4 +11,5 @@ sealed class RouteScreen(val route: String) {
     object Profile : RouteScreen("profile")
     object Comment : RouteScreen("comment")
     object ContactComment : RouteScreen("ContactComment")
+    object StudentCourseEnrollment : RouteScreen("student_course_enrollment")
 }

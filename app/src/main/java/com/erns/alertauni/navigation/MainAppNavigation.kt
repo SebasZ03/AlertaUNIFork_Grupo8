@@ -24,9 +24,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import com.erns.alertauni.domain.manager.DataStoreHelper
 import com.erns.alertauni.screen.contact.StudentContactScreen
 import com.erns.alertauni.screen.contact.TeacherContactScreen
+import com.erns.alertauni.screen.course.StudentCourseRoute
 import com.erns.alertauni.screen.course.StudentCourseScreen
+import com.erns.alertauni.screen.course.TeacherCourseDetailRoute
 import com.erns.alertauni.screen.login.LoginScreen
 import com.erns.alertauni.screen.login.ProfileScreen
 import com.erns.alertauni.screen.post.PostCommentScreen
@@ -35,7 +40,15 @@ import com.erns.alertauni.screen.post.PostScreen
 
 @Composable
 fun MainAppNavigation(navController: NavHostController = rememberNavController()) {
+    val context = LocalContext.current
     val userTypeSelected = remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val savedType = DataStoreHelper(context).getUserType()
+        if (!savedType.isNullOrEmpty()) {
+            userTypeSelected.value = savedType
+        }
+    }
     NavHost(
         navController = navController,
         startDestination = RouteScreen.Login.route
@@ -161,9 +174,36 @@ fun MainMenuScreen(userType: String) {
             }
 
             composable(RouteMainMenu.Courses.route) {
-                StudentCourseScreen(
+                if (userType == "PROFESSOR") {
+                    TeacherCourseDetailRoute(
+                        onGoToPosts = {
+                            navController.navigate(RouteMainMenu.Posts.route)
+                        }
+                    )
+                } else {
+                    StudentCourseRoute(
+                        onGoToCourse = { courseId ->
+                            navController.navigate(RouteMainMenu.Posts.route) {
+                                popUpTo(RouteMainMenu.Posts.route) { saveState = true }
+                                launchSingleTop = true
+                            }
+                        },
+                        snackbarHostState = snackbarHostState,
+                        onFabActionReady = { action -> fabAction.value = action }
+                    )
+                }
+            }
+
+            composable(RouteScreen.StudentCourseEnrollment.route) {
+                StudentCourseRoute(
+                    onGoToCourse = { courseId ->
+                        navController.navigate(RouteMainMenu.Posts.route) {
+                            popUpTo(RouteMainMenu.Posts.route) { saveState = true }
+                            launchSingleTop = true
+                        }
+                    },
                     snackbarHostState = snackbarHostState,
-                    onFabActionReady = { fabAction.value = it }
+                    onFabActionReady = { action -> fabAction.value = action }
                 )
             }
 

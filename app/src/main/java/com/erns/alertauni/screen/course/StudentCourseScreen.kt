@@ -1,5 +1,17 @@
 package com.erns.alertauni.screen.course
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview as CameraPreview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,13 +27,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.erns.alertauni.data.model.StudentEnrollment
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.Executors
 
 // Paleta de colores oficial de Figma
 private val FigmaGold = Color(0xFFC59A27)
@@ -44,19 +66,53 @@ enum class CourseUiState {
 }
 
 @Composable
+fun StudentCourseRoute(
+    viewModel: CourseViewModel = hiltViewModel(),
+    onGoToCourse: (String) -> Unit = {},
+    snackbarHostState: SnackbarHostState? = null,
+    onFabActionReady: (() -> Unit) -> Unit = {}
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val studentEnrollment by viewModel.studentEnrollment.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val studentName by viewModel.username.collectAsState()
+
+    StudentCourseScreen(
+        studentName = studentName,
+        uiState = uiState,
+        studentEnrollment = studentEnrollment,
+        errorMessage = errorMessage,
+        onFindCourse = { code -> viewModel.findCourseByCode(code) },
+        onProcessQr = { qrContent -> viewModel.processQrScanResult(qrContent) },
+        onEnrollCourse = { courseId -> viewModel.enrollStudent(courseId) },
+        onOpenQr = { viewModel.openQrScanner() },
+        onSwitchToManual = { viewModel.resetToManualInput() },
+        onGoToCourse = {
+            val courseId = studentEnrollment?.courseId?.ifBlank { studentEnrollment?.course_catalog_id } ?: ""
+            onGoToCourse(courseId)
+        },
+        snackbarHostState = snackbarHostState,
+        onFabActionReady = onFabActionReady
+    )
+}
+
+@Composable
 fun StudentCourseScreen(
     studentName: String = "Juan",
     uiState: CourseUiState = CourseUiState.INPUT_CODE,
     studentEnrollment: StudentEnrollment? = null,
     errorMessage: String? = null,
     onFindCourse: (String) -> Unit = {},
+    onProcessQr: (String) -> Unit = {},
     onEnrollCourse: (String) -> Unit = {},
     onOpenQr: () -> Unit = {},
     onSwitchToManual: () -> Unit = {},
-    onGoToCourse: () -> Unit = {}
+    onGoToCourse: () -> Unit = {},
+    snackbarHostState: SnackbarHostState? = null,
+    onFabActionReady: (() -> Unit) -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(2) }
 
     Scaffold(
         containerColor = FigmaBackground,
@@ -238,28 +294,42 @@ fun StudentCourseScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(280.dp)
-                            .background(Color(0xFFE0E0E0), RoundedCornerShape(16.dp)),
+                            .clip(RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(180.dp)
-                                .background(Color.White, RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "QR",
-                                fontSize = 48.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.Black
+                        if (uiState == CourseUiState.SCAN_QR) {
+                            QrCameraScanner(
+                                modifier = Modifier.fillMaxSize(),
+                                onQrCodeScanned = onProcessQr
                             )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xFFE0E0E0), RoundedCornerShape(16.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(180.dp)
+                                        .background(Color.White, RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "QR",
+                                        fontSize = 48.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
                         }
 
                         if (uiState == CourseUiState.LOADING_QR) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -274,7 +344,7 @@ fun StudentCourseScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -337,7 +407,7 @@ fun StudentCourseScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
-                        onClick = { studentEnrollment?.let { onEnrollCourse(it.courseId) } },
+                        onClick = { studentEnrollment?.let { onEnrollCourse(it.course_catalog_id.ifBlank { it.courseId }) } },
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = FigmaGold),
                         shape = RoundedCornerShape(12.dp)
@@ -430,6 +500,150 @@ fun StudentCourseScreen(
                     ) {
                         Text("Ir al Curso", color = Color.White, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QrCameraScanner(
+    modifier: Modifier = Modifier,
+    onQrCodeScanned: (String) -> Unit
+) {
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) {
+        Box(
+            modifier = modifier.background(Color(0xFFE0E0E0), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(180.dp)
+                    .background(Color.White, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "QR",
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.Black
+                )
+            }
+        }
+        return
+    }
+
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    if (hasCameraPermission) {
+        AndroidView(
+            factory = { ctx ->
+                val previewView = PreviewView(ctx)
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+                    val preview = CameraPreview.Builder().build().also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+
+                    val barcodeScanner = BarcodeScanning.getClient()
+                    var isDetected = false
+
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+
+                    imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
+                        @OptIn(ExperimentalGetImage::class)
+                        val mediaImage = imageProxy.image
+                        if (mediaImage != null && !isDetected) {
+                            val image = InputImage.fromMediaImage(
+                                mediaImage,
+                                imageProxy.imageInfo.rotationDegrees
+                            )
+                            barcodeScanner.process(image)
+                                .addOnSuccessListener { barcodes ->
+                                    for (barcode in barcodes) {
+                                        val rawValue = barcode.rawValue
+                                        if (!rawValue.isNullOrEmpty() && !isDetected) {
+                                            isDetected = true
+                                            cameraProvider.unbindAll()
+                                            onQrCodeScanned(rawValue)
+                                            break
+                                        }
+                                    }
+                                }
+                                .addOnCompleteListener {
+                                    imageProxy.close()
+                                }
+                        } else {
+                            imageProxy.close()
+                        }
+                    }
+
+                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                    try {
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            imageAnalysis
+                        )
+                    } catch (e: Exception) {
+                        Log.e("QrCameraScanner", "Error al inicializar la cámara", e)
+                    }
+                }, ContextCompat.getMainExecutor(ctx))
+
+                previewView
+            },
+            modifier = modifier
+        )
+    } else {
+        Box(
+            modifier = modifier.background(Color.DarkGray, RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Se requiere permiso de cámara para escanear el código QR.",
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    colors = ButtonDefaults.buttonColors(containerColor = FigmaGold)
+                ) {
+                    Text("Conceder Permiso", color = Color.White)
                 }
             }
         }
