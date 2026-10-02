@@ -8,8 +8,6 @@ import com.erns.alertauni.data.repository.TeacherCourseRepository
 import com.erns.alertauni.domain.manager.DataStoreHelper
 import com.erns.alertauni.util.CourseCodeUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +18,7 @@ import javax.inject.Inject
 data class TeacherCourseUiState(
     val courseId: String = "CAT-101",
     val courseCode: String = "000001",
-    val courseName: String = "Curso 1 - Programación Avanzada",
+    val courseName: String = "Cargando curso...",
     val semester: String = "2026-B",
     val enrollmentCode: String = "",
     val qrBitmap: Bitmap? = null,
@@ -34,8 +32,7 @@ data class TeacherCourseUiState(
 @HiltViewModel
 class TeacherCourseViewModel @Inject constructor(
     private val teacherCourseRepository: TeacherCourseRepository,
-    private val dataStoreHelper: DataStoreHelper,
-    private val supabaseClient: SupabaseClient
+    private val dataStoreHelper: DataStoreHelper
 ) : ViewModel() {
     private val TAG = "TeacherCourseViewModel"
 
@@ -44,7 +41,7 @@ class TeacherCourseViewModel @Inject constructor(
 
     init {
         loadTeacherInfo()
-        loadSavedCourseCode("CAT-101")
+        loadSavedCourseData("CAT-101")
     }
 
     private fun loadTeacherInfo() {
@@ -58,35 +55,31 @@ class TeacherCourseViewModel @Inject constructor(
         }
     }
 
-    private fun loadSavedCourseCode(courseId: String) {
+    private fun loadSavedCourseData(courseId: String) {
         viewModelScope.launch {
-            try {
-                val list = supabaseClient.postgrest["course_catalog"]
-                    .select()
-                    .decodeList<Map<String, Any>>()
+            _uiState.update { it.copy(isLoading = true) }
+            teacherCourseRepository.getCourseDetails(courseId)
+                .onSuccess { details ->
+                    val codeToUse = details.classCode.ifBlank { "A8K92X" }
+                    val bitmap = CourseCodeUtil.generateQrCodeBitmap(codeToUse, 512)
+                    Log.d(TAG, "Course details loaded from DB: name=${details.courseName}, code=${details.courseCode}, classCode=$codeToUse")
 
-                val row = list.firstOrNull { it["course_catalog_id"]?.toString() == courseId } ?: list.firstOrNull()
-                val existingCode = row?.get("class_code")?.toString() ?: ""
-                val actualCourseId = row?.get("course_catalog_id")?.toString() ?: courseId
-
-                val codeToUse = if (existingCode.isNotBlank()) existingCode else "A8K92X"
-                val bitmap = CourseCodeUtil.generateQrCodeBitmap(codeToUse, 512)
-
-                Log.d(TAG, "Loaded saved course code: code=$codeToUse for courseId=$actualCourseId")
-
-                _uiState.update {
-                    it.copy(
-                        courseId = actualCourseId,
-                        enrollmentCode = codeToUse,
-                        qrBitmap = bitmap
-                    )
+                    _uiState.update { current ->
+                        current.copy(
+                            courseId = details.courseCatalogId.ifBlank { courseId },
+                            courseCode = details.courseCode.ifBlank { "000001" },
+                            courseName = details.courseName.ifBlank { "Curso 1 - Programación Avanzada" },
+                            semester = details.semester.ifBlank { "2026-B" },
+                            enrollmentCode = codeToUse,
+                            qrBitmap = bitmap,
+                            isLoading = false
+                        )
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading saved course code: ${e.message}", e)
-                val defaultCode = "A8K92X"
-                val defaultBitmap = CourseCodeUtil.generateQrCodeBitmap(defaultCode, 512)
-                _uiState.update { it.copy(enrollmentCode = defaultCode, qrBitmap = defaultBitmap) }
-            }
+                .onFailure { ex ->
+                    Log.e(TAG, "Error loading course details from DB: ${ex.message}", ex)
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Error cargando BD: ${ex.message}") }
+                }
         }
     }
 
@@ -110,15 +103,12 @@ class TeacherCourseViewModel @Inject constructor(
                         successMessage = "Código $newCode cambiado exitosamente"
                     )
                 }
-            }.onFailure {
+            }.onFailure { ex ->
                 _uiState.update { current ->
                     current.copy(
                         courseId = targetCourseId,
-                        enrollmentCode = newCode,
-                        qrBitmap = bitmap,
-                        isLoading = false,
-                        isEnrollmentOpen = true,
-                        errorMessage = "Código $newCode cambiado localmente"
+                        errorMessage = "Error al actualizar código: ${ex.message}",
+                        isLoading = false
                     )
                 }
             }
